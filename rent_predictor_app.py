@@ -93,7 +93,7 @@ for col in X.columns:
     elif col not in input_data:
         input_data[col] = 0  # for any missing column
 
-input_df = pd.DataFrame([input_data])
+input_df = pd.DataFrame([input_data])[X.columns]
 
 # Predict rent
 if st.button("Predict Rent"):
