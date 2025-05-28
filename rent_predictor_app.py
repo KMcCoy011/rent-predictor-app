@@ -41,8 +41,7 @@ home_type_options = {
     'APARTMENT': 'Apartment',
     'SINGLE_FAMILY': 'Single-Family',
     'TOWNHOUSE': 'Townhouse',
-    'MULTI_FAMILY': 'Multi-Family',
-    'MULTIUNIT': 'Multi-Family',
+    'MULTI_FAMILY','MULTIUNIT': 'Multi-Family',
     'CONDO': 'Condo'
 }
 
