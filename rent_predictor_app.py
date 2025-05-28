@@ -9,10 +9,11 @@ from sklearn.model_selection import train_test_split
 def load_clean_data():
     df = pd.read_csv('TrueFinalData.csv')
     df = df.drop(columns=['Address', '0', 'Latitude', 'Longitude', 'Census Tract', 'Traffic', 'SoundScore'], errors='ignore')
-    df['City'] = df['City'].str.title()  # 🔧 Fix inconsistent capitalization
+    df['City'] = df['City'].str.title()  # Standardize capitalization
     df['Home Type'] = df['Home Type'].replace({'MULTIUNIT': 'MULTI_FAMILY'})
-    df = pd.get_dummies(df, columns=["City", "Home Type"], prefix=["City", "Home Type"], drop_first=True)
-    return df
+    raw_city_options = sorted(df['City'].dropna().unique())  # Keep all city names
+    df_encoded = pd.get_dummies(df, columns=["City", "Home Type"], prefix=["City", "Home Type"], drop_first=True)
+    return df_encoded, raw_city_options
 
 # Caching model training
 @st.cache_resource
@@ -32,11 +33,10 @@ def train_model(df):
     return final_model, X
 
 # Load and process data
-df = load_clean_data()
+df, city_options = load_clean_data()
 model, X = train_model(df)
 
 # Dropdown options
-city_options = sorted([c.replace("City_", "") for c in X.columns if c.startswith("City_")])
 home_type_options = {
     'APARTMENT': 'Apartment',
     'SINGLE_FAMILY': 'Single-Family',
@@ -45,7 +45,7 @@ home_type_options = {
     'CONDO': 'Condo'
 }
 
-# Scale ranges for sliders
+# Scale ranges
 scale_ranges = {
     "Noise Pollution": (df["Noise Pollution"].min(), df["Noise Pollution"].max()),
     "PM2.5": (df["PM2.5"].min(), df["PM2.5"].max()),
@@ -90,7 +90,7 @@ input_data = {
     "Distance to Grocery Store": distance_grocery,
 }
 
-# One-hot encode input
+# Add one-hot encoded city and home type columns
 for col in X.columns:
     if col.startswith("City_"):
         input_data[col] = 1 if col == f"City_{selected_city}" else 0
