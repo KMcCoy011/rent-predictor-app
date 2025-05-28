@@ -4,15 +4,38 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 
-# Load and clean dataset
-df = pd.read_csv('TrueFinalData.csv')
-df = df.drop(columns=['Address', '0', 'Latitude', 'Longitude', 'Census Tract', 'Traffic', 'SoundScore'], errors='ignore')
+# Caching data loading and preprocessing
+@st.cache_data
+def load_clean_data():
+    df = pd.read_csv('TrueFinalData.csv')
+    df = df.drop(columns=['Address', '0', 'Latitude', 'Longitude', 'Census Tract', 'Traffic', 'SoundScore'], errors='ignore')
+    df['Home Type'] = df['Home Type'].replace({'MULTIUNIT': 'MULTI_FAMILY'})
+    df = pd.get_dummies(df, columns=["City", "Home Type"], prefix=["City", "Home Type"], drop_first=True)
+    return df
 
-# Combine MULTIUNIT and MULTI_FAMILY into Multi-Family
-df['Home Type'] = df['Home Type'].replace({'MULTIUNIT': 'MULTI_FAMILY'})
+# Caching model training
+@st.cache_resource
+def train_model(df):
+    X = df.drop(columns=["Minimum Price"])
+    y = df["Minimum Price"]
+    model_temp = LinearRegression()
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+    model_temp.fit(X_train, y_train)
+    residuals = y_train - model_temp.predict(X_train)
+    z_scores = np.abs((residuals - residuals.mean()) / residuals.std())
+    X_train_no_outliers = X_train[z_scores < 3]
+    y_train_no_outliers = y_train[z_scores < 3]
 
-# Keep dropdown options before encoding
-city_options = sorted(df['City'].dropna().unique())
+    final_model = LinearRegression()
+    final_model.fit(X_train_no_outliers, y_train_no_outliers)
+    return final_model, X
+
+# Load and process data
+df = load_clean_data()
+model, X = train_model(df)
+
+# Dropdown options
+city_options = sorted([c.replace("City_", "") for c in X.columns if c.startswith("City_")])
 home_type_options = {
     'APARTMENT': 'Apartment',
     'SINGLE_FAMILY': 'Single-Family',
@@ -21,33 +44,19 @@ home_type_options = {
     'CONDO': 'Condo'
 }
 
-# Save scale ranges
+# Scale ranges for rescaling user sliders
 scale_ranges = {
     "Noise Pollution": (df["Noise Pollution"].min(), df["Noise Pollution"].max()),
     "PM2.5": (df["PM2.5"].min(), df["PM2.5"].max()),
     "Poverty": (df["Poverty"].min(), df["Poverty"].max()),
 }
 
-# One-hot encode
-df = pd.get_dummies(df, columns=["City", "Home Type"], prefix=["City", "Home Type"], drop_first=True)
-X = df.drop(columns=["Minimum Price"])
-y = df["Minimum Price"]
-
-# Remove outliers from training set
-model_temp = LinearRegression()
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
-model_temp.fit(X_train, y_train)
-residuals = y_train - model_temp.predict(X_train)
-z_scores = np.abs((residuals - residuals.mean()) / residuals.std())
-X_train_no_outliers = X_train[z_scores < 3]
-y_train_no_outliers = y_train[z_scores < 3]
-
-# Final model without outliers
-model = LinearRegression()
-model.fit(X_train_no_outliers, y_train_no_outliers)
+def scale_to_raw(val, col):
+    min_val, max_val = scale_ranges[col]
+    return min_val + (val - 1) / 9 * (max_val - min_val)
 
 # Streamlit UI
-st.title("Bay Area Rent Price Estimator")
+st.title("🏠 Bay Area Rent Price Estimator")
 
 selected_city = st.selectbox("Select City", city_options)
 selected_home_type_label = st.selectbox("Select Home Type", list(home_type_options.values()))
@@ -66,11 +75,7 @@ distance_school = st.number_input("Distance to School (mi)", min_value=0.0, max_
 distance_hospital = st.number_input("Distance to Hospital (mi)", min_value=0.0, max_value=10.0, value=1.0)
 distance_grocery = st.number_input("Distance to Grocery Store (mi)", min_value=0.0, max_value=10.0, value=1.0)
 
-# Reverse-scale back to original ranges
-def scale_to_raw(val, col):
-    min_val, max_val = scale_ranges[col]
-    return min_val + (val - 1) / 9 * (max_val - min_val)
-
+# Prepare input data
 input_data = {
     "Minimum Beds": bedrooms,
     "Minimum Baths": bathrooms,
@@ -84,18 +89,18 @@ input_data = {
     "Distance to Grocery Store": distance_grocery,
 }
 
-# Add one-hot encoded city and home type
+# Add one-hot encoded columns
 for col in X.columns:
     if col.startswith("City_"):
         input_data[col] = 1 if col == f"City_{selected_city}" else 0
     elif col.startswith("Home Type_"):
         input_data[col] = 1 if col == f"Home Type_{selected_home_type}" else 0
     elif col not in input_data:
-        input_data[col] = 0  # for any missing column
+        input_data[col] = 0
 
 input_df = pd.DataFrame([input_data])[X.columns]
 
-# Predict rent
-if st.button("Predict Rent"):
+# Prediction button
+if st.button("🔍 Predict Rent"):
     prediction = model.predict(input_df)[0]
-    st.subheader(f"Estimated Rent Price: ${int(prediction):,}")
+    st.subheader(f"💵 Estimated Rent Price: ${int(prediction):,}")
