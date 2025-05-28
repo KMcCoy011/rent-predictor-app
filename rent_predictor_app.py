@@ -9,9 +9,14 @@ from sklearn.model_selection import train_test_split
 def load_clean_data():
     df = pd.read_csv('TrueFinalData.csv')
     df = df.drop(columns=['Address', '0', 'Latitude', 'Longitude', 'Census Tract', 'Traffic', 'SoundScore'], errors='ignore')
-    df['City'] = df['City'].str.title()  # Standardize capitalization
-    df['Home Type'] = df['Home Type'].replace({'MULTIUNIT': 'MULTI_FAMILY'})
-    raw_city_options = sorted(df['City'].dropna().unique())  # Keep all city names
+    df['City'] = df['City'].str.title()  # Standardize city names
+    # 🔧 Normalize home type: map MULTIUNIT and MULTI_FAMILY to MULTI_FAMILY
+    df['Home Type'] = df['Home Type'].replace({
+        'MULTIUNIT': 'MULTI_FAMILY',
+        'Multiunit': 'MULTI_FAMILY',
+        'MULTI_FAMILY': 'MULTI_FAMILY'
+    })
+    raw_city_options = sorted(df['City'].dropna().unique())  # Full city list before drop_first
     df_encoded = pd.get_dummies(df, columns=["City", "Home Type"], prefix=["City", "Home Type"], drop_first=True)
     return df_encoded, raw_city_options
 
@@ -41,7 +46,7 @@ home_type_options = {
     'APARTMENT': 'Apartment',
     'SINGLE_FAMILY': 'Single-Family',
     'TOWNHOUSE': 'Townhouse',
-    'MULTI_FAMILY','MULTIUNIT': 'Multi-Family',
+    'MULTI_FAMILY': 'Multi-Family',  # 🔧 MULTIUNIT and MULTI_FAMILY both map here
     'CONDO': 'Condo'
 }
 
@@ -90,7 +95,7 @@ input_data = {
     "Distance to Grocery Store": distance_grocery,
 }
 
-# Add one-hot encoded city and home type columns
+# One-hot encode input manually
 for col in X.columns:
     if col.startswith("City_"):
         input_data[col] = 1 if col == f"City_{selected_city}" else 0
@@ -101,7 +106,7 @@ for col in X.columns:
 
 input_df = pd.DataFrame([input_data])[X.columns]
 
-# Prediction
-if st.button("🔍 Predict Rent"):
+# Predict and display
+if st.button("🔍 Estimate Rent Price"):
     prediction = model.predict(input_df)[0]
-    st.subheader(f"💵 Estimated Rent Price: ${int(prediction):,}")
+    st.subheader(f"💵 Estimated Monthly Rent: ${int(prediction):,}")
